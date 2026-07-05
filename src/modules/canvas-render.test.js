@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_EXPORT_WIDTH } from './constants.js';
-import { createHistoryPreviewDataUrl, drawThumbnail, exportSlices } from './canvas-render.js';
+import { createHistoryPreviewDataUrl, createSlicePreviewDataUrl, drawThumbnail, exportSlices } from './canvas-render.js';
 
 function installCanvasMock() {
   const records = [];
@@ -209,6 +209,32 @@ test('createHistoryPreviewDataUrl 会按整图高度绘制并返回 webp 预览'
       0,
       128,
       170
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test('createSlicePreviewDataUrl 会按选中切片绘制单张预览', () => {
+  const { records, restore } = installCanvasMock();
+
+  try {
+    const url = createSlicePreviewDataUrl(
+      { naturalWidth: 1080 },
+      { start: 600, end: 2100, height: 1500 }
+    );
+
+    assert.equal(url, 'data:image/webp;base64,preview');
+    assert.deepEqual(records[0].drawImageCalls[0], [
+      { naturalWidth: 1080 },
+      0,
+      600,
+      1080,
+      1500,
+      0,
+      0,
+      420,
+      Math.round(420 * (4 / 3))
     ]);
   } finally {
     restore();

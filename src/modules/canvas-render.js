@@ -61,6 +61,35 @@ export function createHistoryPreviewDataUrl(image, cuts = []) {
   return url;
 }
 
+export function createSlicePreviewDataUrl(image, slice) {
+  const canvas = document.createElement('canvas');
+  const width = 420;
+  const aspectRatio = 4 / 3;
+  const height = Math.round(width * aspectRatio);
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+  context.drawImage(
+    image,
+    0,
+    slice.start,
+    image.naturalWidth,
+    slice.height,
+    0,
+    0,
+    width,
+    height
+  );
+
+  const url = canvas.toDataURL('image/webp', 0.88);
+  canvas.width = 0;
+  canvas.height = 0;
+  return url;
+}
+
 export async function exportSlices({ image, slices, ratio, addWatermark, onProgress }) {
   const files = [];
 

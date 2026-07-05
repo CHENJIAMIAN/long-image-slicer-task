@@ -291,6 +291,42 @@ button {
   touch-action: none;
 }
 
+.preview-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.slice-preview-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(119, 83, 58, 0.1);
+}
+
+.slice-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.slice-preview-frame {
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid rgba(119, 83, 58, 0.12);
+}
+
+.slice-preview-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
 .preview-stage {
   position: relative;
   margin: 0 auto;

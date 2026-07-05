@@ -1,6 +1,6 @@
 import './style.css';
 import { DEFAULT_EXPORT_WIDTH, LARGE_IMAGE_HEIGHT_THRESHOLD, RATIOS } from './modules/constants.js';
-import { createHistoryPreviewDataUrl, drawThumbnail, exportSlices } from './modules/canvas-render.js';
+import { createHistoryPreviewDataUrl, createSlicePreviewDataUrl, drawThumbnail, exportSlices } from './modules/canvas-render.js';
 import { saveImageFiles, saveZipArchive } from './modules/export.js';
 import {
   getBatchExportSuccessMessage,
@@ -72,6 +72,11 @@ const state = {
 const root = document.querySelector('#app');
 let toastTimer;
 let persistTimer;
+const uiState = {
+  thumbsScrollLeft: 0,
+  previewScrollLeft: 0,
+  previewScrollTop: 0
+};
 
 renderApp();
 registerServiceWorker();
@@ -79,6 +84,7 @@ bindGlobalPaste();
 restoreSession();
 
 function renderApp() {
+  captureScrollState();
   root.innerHTML = `
     <div class="app-shell">
       <header class="topbar">
@@ -188,6 +194,7 @@ function renderApp() {
 
   bindUi();
   renderThumbnails();
+  restoreScrollState();
 }
 
 function bindUi() {
@@ -303,6 +310,7 @@ function bindUi() {
       state.selectedSliceIndex = Number(button.dataset.index);
       renderApp();
       scrollToSelectedSlice();
+      scrollPreviewToSelectedSlice();
     });
   });
 
@@ -402,28 +410,40 @@ function getPreviewMarkup() {
   const selected = slices[state.selectedSliceIndex] || slices[0];
   const width = Math.min(820, state.loadedImage.width);
   const scaledHeight = Math.round((state.loadedImage.height / state.loadedImage.width) * width);
+  const slicePreview = selected ? createSlicePreviewDataUrl(state.loadedImage.image, selected) : '';
 
   return `
-    <div class="preview-scroll" id="preview-scroll">
-      <div class="preview-stage" style="width:${width}px;height:${scaledHeight}px;transform:scale(${state.zoom})">
-        <img class="preview-image" src="${state.loadedImage.url}" alt="长截图预览" />
-        ${
-          selected
-            ? `<div class="slice-overlay" style="top:${(selected.start / state.loadedImage.height) * scaledHeight}px;height:${(selected.height / state.loadedImage.height) * scaledHeight}px"></div>`
-            : ''
-        }
-        ${state.finalCuts
-          .map((cut, index) => {
-            const top = (cut / state.loadedImage.height) * scaledHeight;
-            return `
-              <div class="cut-line ${index === state.selectedSliceIndex ? 'is-active' : ''}" style="top:${top}px" data-cut-index="${index}">
-                <button type="button" aria-label="调整第 ${index + 1} 条切割线"></button>
-              </div>
-            `;
-          })
-          .join('')}
+    <div class="preview-stack">
+      <section class="slice-preview-card">
+        <div class="slice-preview-head">
+          <strong>当前切片</strong>
+          <span class="thumb-desc">${selected ? `第 ${state.selectedSliceIndex + 1} 张 · ${Math.round(selected.height)} px` : '暂无切片'}</span>
+        </div>
+        <div class="slice-preview-frame">
+          ${slicePreview ? `<img class="slice-preview-image" src="${slicePreview}" alt="当前切片预览" />` : '<div class="thumb-desc">暂无切片</div>'}
+        </div>
+      </section>
+      <div class="preview-scroll" id="preview-scroll">
+        <div class="preview-stage" style="width:${width}px;height:${scaledHeight}px;transform:scale(${state.zoom})">
+          <img class="preview-image" src="${state.loadedImage.url}" alt="长截图预览" />
+          ${
+            selected
+              ? `<div class="slice-overlay" style="top:${(selected.start / state.loadedImage.height) * scaledHeight}px;height:${(selected.height / state.loadedImage.height) * scaledHeight}px"></div>`
+              : ''
+          }
+          ${state.finalCuts
+            .map((cut, index) => {
+              const top = (cut / state.loadedImage.height) * scaledHeight;
+              return `
+                <div class="cut-line ${index === state.selectedSliceIndex ? 'is-active' : ''}" style="top:${top}px" data-cut-index="${index}">
+                  <button type="button" aria-label="调整第 ${index + 1} 条切割线"></button>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+        <div class="preview-hud">缩放 ${Math.round(state.zoom * 100)}%</div>
       </div>
-      <div class="preview-hud">缩放 ${Math.round(state.zoom * 100)}%</div>
     </div>
   `;
 }
@@ -1204,7 +1224,61 @@ function applyZoom(nextZoom, previewScroll, centerPoint) {
 
 function scrollToSelectedSlice() {
   const card = document.querySelectorAll('.thumb-card')[state.selectedSliceIndex];
-  card?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  const track = document.querySelector('#thumbs-track');
+  if (!card || !track) {
+    return;
+  }
+  const cardLeft = card.offsetLeft;
+  const cardCenter = cardLeft + card.offsetWidth / 2;
+  const targetLeft = Math.max(0, cardCenter - track.clientWidth / 2);
+  track.scrollTo({ left: targetLeft, behavior: 'smooth' });
+}
+
+function scrollPreviewToSelectedSlice() {
+  if (!state.loadedImage) {
+    return;
+  }
+  const previewScroll = document.querySelector('#preview-scroll');
+  const previewStage = document.querySelector('.preview-stage');
+  if (!previewScroll || !previewStage) {
+    return;
+  }
+
+  const slices = getSlices(state.loadedImage.height, state.finalCuts);
+  const selected = slices[state.selectedSliceIndex];
+  if (!selected) {
+    return;
+  }
+
+  const stageHeight = previewStage.offsetHeight;
+  const sliceTop = (selected.start / state.loadedImage.height) * stageHeight;
+  const sliceHeight = (selected.height / state.loadedImage.height) * stageHeight;
+  const targetTop = Math.max(0, sliceTop + sliceHeight / 2 - previewScroll.clientHeight / 2);
+  previewScroll.scrollTo({ top: targetTop, behavior: 'smooth' });
+}
+
+function captureScrollState() {
+  const thumbsTrack = document.querySelector('#thumbs-track');
+  const previewScroll = document.querySelector('#preview-scroll');
+  if (thumbsTrack) {
+    uiState.thumbsScrollLeft = thumbsTrack.scrollLeft;
+  }
+  if (previewScroll) {
+    uiState.previewScrollLeft = previewScroll.scrollLeft;
+    uiState.previewScrollTop = previewScroll.scrollTop;
+  }
+}
+
+function restoreScrollState() {
+  const thumbsTrack = document.querySelector('#thumbs-track');
+  const previewScroll = document.querySelector('#preview-scroll');
+  if (thumbsTrack) {
+    thumbsTrack.scrollLeft = uiState.thumbsScrollLeft;
+  }
+  if (previewScroll) {
+    previewScroll.scrollLeft = uiState.previewScrollLeft;
+    previewScroll.scrollTop = uiState.previewScrollTop;
+  }
 }
 
 function showToast(message) {
@@ -1227,7 +1301,8 @@ function showToast(message) {
 async function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+      navigator.serviceWorker.register(swUrl, { scope: import.meta.env.BASE_URL }).catch(() => {});
     });
   }
 }

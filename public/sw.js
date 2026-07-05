@@ -1,10 +1,11 @@
 const CACHE_NAME = 'long-image-slicer-v1';
+const BASE = self.registration?.scope || self.location.origin + '/';
 const ASSETS = [
-  '/',
-  '/manifest.json',
-  '/icons/favicon.svg',
-  '/icons/icon-192.svg',
-  '/icons/icon-512.svg'
+  BASE,
+  `${BASE}manifest.json`,
+  `${BASE}icons/favicon.svg`,
+  `${BASE}icons/icon-192.svg`,
+  `${BASE}icons/icon-512.svg`
 ];
 
 self.addEventListener('install', (event) => {
