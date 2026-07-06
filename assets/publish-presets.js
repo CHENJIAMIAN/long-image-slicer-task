@@ -50,6 +50,7 @@
 
   let currentPresetId = readStoredPreset();
   let runtimePolishTimer = null;
+  let runtimePolishInterval = null;
 
   bootstrap();
 
@@ -112,15 +113,33 @@
   }
 
   function applyRuntimePolish() {
-    syncVisibleCounts();
-    normalizeMobilePreview();
-    injectOverlay();
-    window.clearTimeout(runtimePolishTimer);
-    runtimePolishTimer = window.setTimeout(() => {
+    const runPolish = () => {
       syncVisibleCounts();
       normalizeMobilePreview();
       injectOverlay();
+    };
+
+    runPolish();
+    window.clearTimeout(runtimePolishTimer);
+    runtimePolishTimer = window.setTimeout(() => {
+      runPolish();
     }, 180);
+
+    window.clearInterval(runtimePolishInterval);
+    let attempts = 0;
+    runtimePolishInterval = window.setInterval(() => {
+      attempts += 1;
+      runPolish();
+
+      const scroller = document.querySelector('#preview-scroll');
+      const stage = document.querySelector('.preview-stage');
+      const settled = !scroller || !stage || stage.clientWidth <= scroller.clientWidth + 2;
+
+      if (settled || attempts >= 8) {
+        window.clearInterval(runtimePolishInterval);
+        runtimePolishInterval = null;
+      }
+    }, 120);
   }
 
   function mountPublishPanel(workspace) {
