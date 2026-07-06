@@ -56,8 +56,9 @@
     patchAppRender();
     patchDownloadNaming();
     applyPresetToPage();
-    injectOverlay();
+    applyRuntimePolish();
     window.addEventListener('resize', injectOverlay);
+    window.addEventListener('resize', applyRuntimePolish);
   }
 
   function patchAppRender() {
@@ -75,7 +76,7 @@
         if (this && this.id === 'app') {
           queueMicrotask(() => {
             applyPresetToPage();
-            injectOverlay();
+            applyRuntimePolish();
           });
         }
       }
@@ -107,6 +108,12 @@
     if (exportHint) {
       exportHint.textContent = `导出文件会自动附带 “${preset.exportSuffix}” 后缀，方便直接发到对应平台。`;
     }
+  }
+
+  function applyRuntimePolish() {
+    normalizeMobilePreview();
+    syncVisibleCounts();
+    injectOverlay();
   }
 
   function mountPublishPanel(workspace) {
@@ -224,6 +231,80 @@
     overlay.style.width = `${Math.max(0, Math.round(width * (1 - left - right)))}px`;
     overlay.style.height = `${Math.max(0, Math.round(height * (1 - top - bottom)))}px`;
     overlay.querySelector('.publish-overlay-label').textContent = `${preset.title} 安全区`;
+  }
+
+  function normalizeMobilePreview() {
+    if (window.innerWidth > 768) {
+      return;
+    }
+
+    const shell = document.querySelector('#canvas-shell');
+    const stage = document.querySelector('.preview-stage');
+    const image = document.querySelector('.preview-image');
+    if (!shell || !stage || !image) {
+      return;
+    }
+
+    const sourceWidth = image.naturalWidth || stage.clientWidth;
+    const sourceHeight = image.naturalHeight || stage.clientHeight;
+    if (!sourceWidth || !sourceHeight) {
+      return;
+    }
+
+    const currentWidth = stage.clientWidth || parseFloat(stage.style.width) || sourceWidth;
+    const currentHeight = stage.clientHeight || parseFloat(stage.style.height) || sourceHeight;
+    const targetWidth = Math.min(Math.max(280, shell.clientWidth - 2), 820, sourceWidth);
+    const targetHeight = Math.round(sourceHeight / sourceWidth * targetWidth);
+
+    if (Math.abs(currentWidth - targetWidth) < 1 && Math.abs(currentHeight - targetHeight) < 1) {
+      return;
+    }
+
+    const rescaleY = (rawValue) => {
+      const value = Number.parseFloat(rawValue || '0');
+      return Number.isFinite(value) && currentHeight > 0
+        ? `${Math.round(value / currentHeight * targetHeight)}px`
+        : rawValue;
+    };
+
+    stage.querySelectorAll('.cut-line').forEach((line) => {
+      line.style.top = rescaleY(line.style.top);
+    });
+
+    const overlay = stage.querySelector('.slice-overlay');
+    if (overlay) {
+      overlay.style.top = rescaleY(overlay.style.top);
+      overlay.style.height = rescaleY(overlay.style.height);
+    }
+
+    stage.style.width = `${targetWidth}px`;
+    stage.style.height = `${targetHeight}px`;
+
+    const scroller = document.querySelector('#preview-scroll');
+    if (scroller && targetWidth <= scroller.clientWidth + 2) {
+      scroller.scrollLeft = 0;
+    }
+  }
+
+  function syncVisibleCounts() {
+    const thumbsCount = document.querySelectorAll('.thumb-card').length;
+    const loaded = !!document.querySelector('.preview-image');
+    const count = loaded ? thumbsCount : 0;
+
+    const thumbsHeaderCount = document.querySelector('.thumbs-panel .thumbs-header .thumb-desc');
+    if (thumbsHeaderCount) {
+      thumbsHeaderCount.textContent = `${count} 张`;
+    }
+
+    const footerTitle = document.querySelector('.footer-title');
+    if (footerTitle && footerTitle.textContent.includes('准备导出')) {
+      footerTitle.textContent = `准备导出 ${count} 张切片`;
+    }
+
+    const activeTaskDesc = document.querySelector('.task-card.is-active .task-desc');
+    if (activeTaskDesc) {
+      activeTaskDesc.textContent = activeTaskDesc.textContent.replace(/·\\s*\\d+\\s*张切片$/, `· ${count} 张切片`);
+    }
   }
 
   function removeOverlay() {
