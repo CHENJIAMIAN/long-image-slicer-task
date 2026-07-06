@@ -49,6 +49,7 @@
   ];
 
   let currentPresetId = readStoredPreset();
+  let runtimePolishTimer = null;
 
   bootstrap();
 
@@ -111,9 +112,15 @@
   }
 
   function applyRuntimePolish() {
-    normalizeMobilePreview();
     syncVisibleCounts();
+    normalizeMobilePreview();
     injectOverlay();
+    window.clearTimeout(runtimePolishTimer);
+    runtimePolishTimer = window.setTimeout(() => {
+      syncVisibleCounts();
+      normalizeMobilePreview();
+      injectOverlay();
+    }, 180);
   }
 
   function mountPublishPanel(workspace) {
@@ -303,7 +310,7 @@
 
     const activeTaskDesc = document.querySelector('.task-card.is-active .task-desc');
     if (activeTaskDesc) {
-      activeTaskDesc.textContent = activeTaskDesc.textContent.replace(/·\\s*\\d+\\s*张切片$/, `· ${count} 张切片`);
+      activeTaskDesc.textContent = activeTaskDesc.textContent.replace(/·\s*\d+\s*张切片$/, `· ${count} 张切片`);
     }
   }
 
