@@ -49,36 +49,39 @@
   ];
 
   let currentPresetId = readStoredPreset();
-  let mo = null;
 
   bootstrap();
 
   function bootstrap() {
-    attachDomObserver();
+    patchAppRender();
     patchDownloadNaming();
     applyPresetToPage();
     injectOverlay();
+    window.addEventListener('resize', injectOverlay);
   }
 
-  function attachDomObserver() {
-    if (mo) {
-      mo.disconnect();
-    }
-
-    const appRoot = document.querySelector('#app');
-    if (!appRoot) {
-      window.addEventListener('load', attachDomObserver, { once: true });
-      window.addEventListener('resize', injectOverlay);
+  function patchAppRender() {
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+    if (!descriptor || typeof descriptor.set !== 'function' || Element.prototype.__publishPresetPatched) {
       return;
     }
 
-    mo = new MutationObserver(() => {
-      applyPresetToPage();
-      injectOverlay();
+    Object.defineProperty(Element.prototype, 'innerHTML', {
+      configurable: descriptor.configurable,
+      enumerable: descriptor.enumerable,
+      get: descriptor.get,
+      set(value) {
+        descriptor.set.call(this, value);
+        if (this && this.id === 'app') {
+          queueMicrotask(() => {
+            applyPresetToPage();
+            injectOverlay();
+          });
+        }
+      }
     });
 
-    mo.observe(appRoot, { childList: true });
-    window.addEventListener('resize', injectOverlay);
+    Element.prototype.__publishPresetPatched = true;
   }
 
   function applyPresetToPage() {
@@ -228,33 +231,21 @@
   }
 
   function patchDownloadNaming() {
-    const originalCreateObjectURL = URL.createObjectURL.bind(URL);
+    if (HTMLAnchorElement.prototype.__publishPresetPatched) {
+      return;
+    }
 
-    URL.createObjectURL = function patchedCreateObjectURL(object) {
-      const url = originalCreateObjectURL(object);
-      queueMicrotask(() => renamePendingDownloads());
-      return url;
-    };
-
-    document.addEventListener(
-      'click',
-      () => {
-        queueMicrotask(() => renamePendingDownloads());
-      },
-      true
-    );
-  }
-
-  function renamePendingDownloads() {
-    const preset = getCurrentPreset();
-    document.querySelectorAll('a[download]').forEach((anchor) => {
-      if (!anchor.download || anchor.dataset.publishPresetPatched === preset.id) {
-        return;
+    const originalClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function patchedClick() {
+      if (this && this.download) {
+        const preset = getCurrentPreset();
+        this.download = appendSuffix(this.download, preset.exportSuffix);
       }
 
-      anchor.download = appendSuffix(anchor.download, preset.exportSuffix);
-      anchor.dataset.publishPresetPatched = preset.id;
-    });
+      return originalClick.call(this);
+    };
+
+    HTMLAnchorElement.prototype.__publishPresetPatched = true;
   }
 
   function appendSuffix(fileName, suffix) {
