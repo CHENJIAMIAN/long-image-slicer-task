@@ -5,13 +5,122 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#f06a4a" />
     <meta name="description" content="手机长截图智能切成适合小红书发布的多张竖版图片。" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="manifest" href="/long-image-slicer-task/manifest.json" />
     <link rel="icon" href="/long-image-slicer-task/icons/favicon.svg" type="image/svg+xml" />
     <title>长图切片器</title>
+    <script>
+      (() => {
+        const basePath = '/long-image-slicer-task';
+        const serviceWorker = navigator.serviceWorker;
+
+        if (!serviceWorker || typeof serviceWorker.register !== 'function') {
+          return;
+        }
+
+        const originalRegister = serviceWorker.register.bind(serviceWorker);
+        serviceWorker.register = (scriptURL, options) => {
+          const normalizedScript =
+            scriptURL === '/sw.js' ? `${basePath}/sw.js` : scriptURL;
+          const normalizedOptions =
+            normalizedScript === `${basePath}/sw.js`
+              ? { scope: `${basePath}/`, ...(options || {}) }
+              : options;
+          return originalRegister(normalizedScript, normalizedOptions);
+        };
+      })();
+    </script>
     <script type="module" crossorigin src="/long-image-slicer-task/assets/index-C0yO5C1A.js"></script>
+    <link rel="stylesheet" href="/long-image-slicer-task/assets/publish-presets.css" />
     <link rel="stylesheet" crossorigin href="/long-image-slicer-task/assets/index-DJ9NZ6_8.css">
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      (() => {
+        const basePath = '/long-image-slicer-task';
+
+        if (!window.location.search.includes('share-target=1')) {
+          return;
+        }
+
+        window.addEventListener('load', async () => {
+          try {
+            const response = await fetch(`${basePath}/shared-images`, {
+              cache: 'no-store'
+            });
+
+            if (!response.ok) {
+              return;
+            }
+
+            const payload = await response.json();
+            const files = Array.isArray(payload?.files)
+              ? payload.files.map(deserializeSharedFile).filter(Boolean)
+              : [];
+
+            if (!files.length) {
+              return;
+            }
+
+            const fileInput = await waitForFileInput();
+            const transfer = new DataTransfer();
+
+            for (const file of files) {
+              transfer.items.add(file);
+            }
+
+            fileInput.files = transfer.files;
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+          } catch {
+          } finally {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('share-target');
+            window.history.replaceState({}, document.title, url.toString());
+          }
+        });
+
+        function deserializeSharedFile(file) {
+          if (!file || typeof file.data !== 'string') {
+            return null;
+          }
+
+          try {
+            const binary = atob(file.data);
+            const bytes = new Uint8Array(binary.length);
+
+            for (let index = 0; index < binary.length; index += 1) {
+              bytes[index] = binary.charCodeAt(index);
+            }
+
+            return new File([bytes], file.name || 'shared-image.png', {
+              type: file.type || 'image/png'
+            });
+          } catch {
+            return null;
+          }
+        }
+
+        function waitForFileInput() {
+          return new Promise((resolve, reject) => {
+            const startedAt = Date.now();
+            const timer = window.setInterval(() => {
+              const fileInput = document.querySelector('#image-input');
+              if (fileInput) {
+                window.clearInterval(timer);
+                resolve(fileInput);
+                return;
+              }
+
+              if (Date.now() - startedAt > 5000) {
+                window.clearInterval(timer);
+                reject(new Error('找不到图片输入控件'));
+              }
+            }, 100);
+          });
+        }
+      })();
+    </script>
+    <script defer src="/long-image-slicer-task/assets/publish-presets.js"></script>
   </body>
 </html>
