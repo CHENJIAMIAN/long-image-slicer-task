@@ -1,5 +1,4 @@
 (function () {
-  const BASE_PATH = '/long-image-slicer-task';
   const PRESET_STORAGE_KEY = 'long-image-slicer:publish-preset';
   const PRESETS = [
     {
@@ -58,6 +57,7 @@
     attachDomObserver();
     patchDownloadNaming();
     applyPresetToPage();
+    injectOverlay();
   }
 
   function attachDomObserver() {
@@ -65,12 +65,19 @@
       mo.disconnect();
     }
 
+    const appRoot = document.querySelector('#app');
+    if (!appRoot) {
+      window.addEventListener('load', attachDomObserver, { once: true });
+      window.addEventListener('resize', injectOverlay);
+      return;
+    }
+
     mo = new MutationObserver(() => {
       applyPresetToPage();
       injectOverlay();
     });
 
-    mo.observe(document.body, { childList: true, subtree: true });
+    mo.observe(appRoot, { childList: true });
     window.addEventListener('resize', injectOverlay);
   }
 
